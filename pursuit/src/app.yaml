@@ -6,3 +6,6 @@ api_version: 1
 handlers:
 - url: /.*
   script: index.py
+
+builtins:
+- datastore_admin: on
