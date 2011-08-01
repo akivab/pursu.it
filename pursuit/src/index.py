@@ -14,7 +14,7 @@ class MainHandler(webapp.RequestHandler):
     def get(self):
         c = model.User.all()
         c.order("-time")
-        self.response.out.write("so far:<br>")
+        self.response.out.write("Pursu.it players<br>")
         self.response.out.write([(i.name, "".join(i.friendsPlaying)) for i in c])
         
 class ErrorHandler(webapp.RequestHandler):
