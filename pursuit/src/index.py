@@ -2,6 +2,7 @@ from google.appengine.ext import webapp, db
 from django.utils import simplejson as json
 from google.appengine.ext.webapp.util import run_wsgi_app
 from random import random
+import JSONError
 import model
 import logging
 
@@ -56,8 +57,8 @@ class RegistrationHandler(webapp.RequestHandler):
             
         except Exception, e:
             error = str(e)
-            logging.info("Error registering to database: %s" % str(e))
-            return json.dumps({ "message": message, "error":error })
+            logging.info("Error registering to database: %s" % error)
+            return json.dumps({ "message": message, "error": JSONError.GENERIC_ERROR(error) })
             
 class UpdateHandler(webapp.RequestHandler):
     def get(self):
@@ -96,7 +97,7 @@ class UpdateHandler(webapp.RequestHandler):
             return toreturn
         except Exception, e:
             error = str(e)
-            toreturn = json.dumps({ "message": message, "error":error })
+            toreturn = json.dumps({ "message": message, "error": JSONError.GENERIC_ERROR(error) })
             return toreturn
 
 class PlayHandler(webapp.RequestHandler):
@@ -108,12 +109,13 @@ class PlayHandler(webapp.RequestHandler):
         p2 = self.request.get("p2")
         lat = self.request.get("lat")
         lon = self.request.get("lon")
-        message = PlayHandler.makePlay(p1=p1,p2=p2, lat=lat, lon=lon)
+        action = self.request.get("action")
+        message = PlayHandler.makePlay(p1=p1,p2=p2, lat=lat, lon=lon,action=action)
         self.response.out.write(message)        
             
     @classmethod
     def makePlay(cls, **kwargs):
-        return model.Game.play(p1=kwargs['p1'], p2=kwargs['p2'], lat=kwargs['lat'], lon=kwargs['lon'])
+        return model.Game.play(p1=kwargs['p1'], p2=kwargs['p2'], lat=kwargs['lat'], lon=kwargs['lon'], action=kwargs['action'])
 
 class TestHandler(webapp.RequestHandler):
     @classmethod
@@ -145,8 +147,9 @@ class TestHandler(webapp.RequestHandler):
             p2 = self.request.get("p2")
             lat = self.request.get("lat")
             lon = self.request.get("lon")
+            action = self.request.get("action")
             logging.info("Testing out the play mode")
-            message = PlayHandler.makePlay(p1=userId, p2=p2, lat=lat, lon=lon)
+            message = PlayHandler.makePlay(p1=userId, p2=p2, lat=lat, lon=lon, action=action)
         elif todo == "run":
             for i in xrange(20):
                 name = self.names[i % len(self.names)]

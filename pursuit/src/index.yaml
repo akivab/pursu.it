@@ -15,6 +15,12 @@ indexes:
   - name: gameOn
   - name: created
 
+- kind: Game
+  properties:
+  - name: p1
+  - name: p2
+  - name: created
+
 - kind: Greeting
   ancestor: yes
   properties:

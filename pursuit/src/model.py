@@ -2,14 +2,14 @@
 #
 # Copyright 2008 Brett Slatkin (adapted by Akiva Bamberger)
 # 
-# Licensed under the Apache License, Version 2.0 (the 'License');
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 # 
 #     http://www.apache.org/licenses/LICENSE-2.0
 # 
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an 'AS IS' BASIS,
+# distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
@@ -29,6 +29,7 @@ from google.appengine.ext import db
 
 import logging
 import math
+import JSONError
 
 import geobox
 
@@ -48,8 +49,8 @@ RADIUS = 3963.1676
 # Time to expire, in seconds
 TIME_TO_EXPIRE = 3600
 
-APP_ID = '186198858096044'
-APP_SECRET = '5175bb6a3b05141f0d0ad972acb0cd05'
+APP_ID = "186198858096044"
+APP_SECRET = "5175bb6a3b05141f0d0ad972acb0cd05"
 
 """
 Helper functions
@@ -66,7 +67,7 @@ def _earth_distance(lat1, lon1, lat2, lon2):
         math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
 
 def getUser(id):
-    return db.GqlQuery('SELECT * FROM User WHERE id=:1',id).get()
+    return db.GqlQuery("SELECT * FROM User WHERE id=:1",id).get()
 
 def process(lat, lon):
     all_boxes = []
@@ -81,13 +82,13 @@ def process(lat, lon):
 
 class FBData():
     def __init__(self, **kwargs):
-        self.access_token = kwargs['access_token']
+        self.access_token = kwargs["access_token"]
         self.setup()
     
     def setup(self):
-        base = 'https://graph.facebook.com/me'
-        friends = '/friends'
-        end = '?access_token=%s' % self.access_token
+        base = "https://graph.facebook.com/me"
+        friends = "/friends"
+        end = "?access_token=%s" % self.access_token
         logging.info("Trying to setup info with token %s" % self.access_token)
         
         about_me_txt = urlfetch.fetch(base + end).content
@@ -97,19 +98,19 @@ class FBData():
         self.friends_json = json.loads(friends_txt)
     
     def getId(self):
-        if 'id' in self.about_me_json:
-            return self.about_me_json['id']
-        raise Exception(self.about_me_json['error']['message'])
+        if "id" in self.about_me_json:
+            return self.about_me_json["id"]
+        raise Exception(self.about_me_json["error"]["message"])
     
     def getName(self):
-        if 'name' in self.about_me_json:
-            return self.about_me_json['name']
-        raise Exception(self.about_me_json['error']['message'])
+        if "name" in self.about_me_json:
+            return self.about_me_json["name"]
+        raise Exception(self.about_me_json["error"]["message"])
     
     def getFriends(self):
-        if 'data' in self.friends_json:
-            return [i['id'] for i in self.friends_json['data']]
-        raise Exception(self.friends_json['error']['message'])
+        if "data" in self.friends_json:
+            return [i["id"] for i in self.friends_json["data"]]
+        raise Exception(self.friends_json["error"]["message"])
 
 class User(db.Model):
     name = db.StringProperty(required=True)
@@ -124,10 +125,10 @@ class User(db.Model):
         logging.info("Finding playing friends for player")
         
         for i in xrange(1 + len(friends)/30):
-            query = db.GqlQuery('SELECT * FROM User WHERE id in :1', friends[i*30:(i+1)*30])
+            query = db.GqlQuery("SELECT * FROM User WHERE id in :1", friends[i*30:(i+1)*30])
             results = query.fetch(len(friends))
             
-            logging.info("No friends found already" if len(results) is 0 else 'Found friends') 
+            logging.info("No friends found already" if len(results) is 0 else "Found friends") 
             
             for result in results:
                 if result.id not in self.friendsPlaying:
@@ -139,13 +140,13 @@ class User(db.Model):
     @classmethod
     def create(cls, **kwargs):
         fb = FBData(**kwargs)
-        kwargs['name'] = fb.getName()
-        kwargs['id'] = fb.getId()
-        newuser = db.GqlQuery('SELECT * FROM User WHERE id=:1',kwargs['id']).get()
-        message = 'Found user in db'
+        kwargs["name"] = fb.getName()
+        kwargs["id"] = fb.getId()
+        newuser = db.GqlQuery("SELECT * FROM User WHERE id=:1",kwargs["id"]).get()
+        message = "Found user in db"
         if not newuser: 
             newuser = cls(**kwargs)
-            message = 'Registering new user'
+            message = "Registering new user"
         friends = fb.getFriends()
         
         newuser.findPlaying(friends)
@@ -153,7 +154,7 @@ class User(db.Model):
         return newuser, message
  
 class UserLocation(db.Model):
-    """Represents a single user's location."""
+    """Represents a single user"s location."""
     user = db.ReferenceProperty(User)
     id = db.StringProperty()
     location = db.GeoPtProperty()
@@ -162,9 +163,9 @@ class UserLocation(db.Model):
     
     @classmethod
     def update(cls, **kwargs):
-        lat = kwargs.pop('lat')
-        lon = kwargs.pop('lon')
-        id = kwargs.pop('id')
+        lat = kwargs.pop("lat")
+        lon = kwargs.pop("lon")
+        id = kwargs.pop("id")
         user = getUser(id)
         
         if not user:
@@ -180,19 +181,19 @@ class UserLocation(db.Model):
         
     @classmethod
     def getLoc(cls, **kwargs):
-        id = kwargs.pop('id')
+        id = kwargs.pop("id")
         result = db.GqlQuery("SELECT * FROM UserLocation WHERE id=:1", id).get()
         return result
         
     
     @classmethod
     def create(cls, **kwargs):
-        lat = kwargs.pop('lat')
-        lon = kwargs.pop('lon')
-        id = kwargs['id'] = kwargs['user'].id
+        lat = kwargs.pop("lat")
+        lon = kwargs.pop("lon")
+        id = kwargs["id"] = kwargs["user"].id
         userLocation = db.GqlQuery("SELECT * FROM UserLocation WHERE id=:1",id).get() 
         if not userLocation:
-            kwargs['geoboxes'], kwargs['location'] = process(lat,lon)
+            kwargs["geoboxes"], kwargs["location"] = process(lat,lon)
             return cls(**kwargs)
         else:
             return userLocation
@@ -200,14 +201,14 @@ class UserLocation(db.Model):
     
     @classmethod
     def query(cls, max_results=1, min_params=(0,2), time_limit = TIME_TO_EXPIRE,**kwargs):
-        lat = kwargs.pop('lat')
-        lon = kwargs.pop('lon')
-        id = kwargs.pop('id')
+        lat = kwargs.pop("lat")
+        lon = kwargs.pop("lon")
+        id = kwargs.pop("id")
         user = getUser(id)
         if not user:
             raise Exception("User not found in  database")
         
-        userLocation = db.GqlQuery('SELECT * FROM UserLocation WHERE id=:1',id).get() 
+        userLocation = db.GqlQuery("SELECT * FROM UserLocation WHERE id=:1",id).get() 
         if not userLocation:
             logging.info("Querying before updating! A big no-no.")
             return
@@ -226,8 +227,8 @@ class UserLocation(db.Model):
                           box, resolution, slice)
             
             query = cls.all()
-            query.filter('geoboxes =', box)
-            query.filter('id in', user.friendsPlaying)
+            query.filter("geoboxes =", box)
+            query.filter("id in", user.friendsPlaying)
             
             results = query.fetch(50)
             logging.debug("Found %d results", len(results))
@@ -254,19 +255,19 @@ class UserLocation(db.Model):
 class Game(db.Model):
     """
     Games class, to handle individual games.
-    Games are stored as follows: person with smaller id is p1
+    Games are stored as follows:
     
     When creating a game, we need to do the following:
     1)    Make sure both people can play -- that is, check that either both have
           nowPlaying to false or have optedOut timed out.
-    2)    If both can play, set their 'play' values to off, and set timestamp to now
+    2)    If both can play, set their "play" values to off, and set timestamp to now
     3)    Create a game in which both are playing, waiting for both to OK it
-    4a)   When both OK, send back JSON saying 'Game on'
-    4b)   If one says, 'Not OK', set game to OFF,  
+    4a)   When both OK, send back JSON saying "Game on"
+    4b)   If one says, "Not OK", set game to OFF,  
     """
 
-    p1 = db.ReferenceProperty(User, collection_name='player1')
-    p2 = db.ReferenceProperty(User, collection_name='player2')
+    p1 = db.ReferenceProperty(User, collection_name="player1")
+    p2 = db.ReferenceProperty(User, collection_name="player2")
     created = db.DateTimeProperty(auto_now_add=True)
     p1verified = db.BooleanProperty(default=False)
     p2verified = db.BooleanProperty(default=False)
@@ -276,68 +277,81 @@ class Game(db.Model):
     def removeStaleGames(cls, **kwargs):
         now = datetime.now()
         since = now - timedelta(seconds=TIME_TO_EXPIRE)
-        results = db.GqlQuery("SELECT * FROM Game WHERE created < :1 AND gameOn=:2", since, True).fetch(10)
+        results = db.GqlQuery("SELECT * FROM Game WHERE created < :1 AND gameOn=:2", since, True).fetch(30)
         count = 0
         for game in results:
             count += 1
-            game.gameOn = False
-            game.p1.nowPlaying = False
-            game.p2.nowPlaying = False
-            game.p1.put()
-            game.p2.put()
-            game.put()
+            Game.setGameOff(game)
         return count > 0
     
     @classmethod
+    def setGameOff(cls, **kwargs):
+        game = kwargs.pop("game")
+        game.gameOn = False
+        game.p1.nowPlaying = False
+        game.p2.nowPlaying = False
+        game.p1.put()
+        game.p2.put()
+        game.put()
+        logging.info("Game set off")
+        
+    @classmethod
     def setGameOn(cls, **kwargs):
-        game = kwargs.pop('game')
-        if not game.gameOn:
-            game.p1.nowPlaying = True
-            game.p2.nowPlaying = True
-            game.p1.put()
-            game.p2.put()
-            game.put()
+        game = kwargs.pop("game")
+        game.gameOn = True
+        game.p1.nowPlaying = True
+        game.p2.nowPlaying = True
+        game.p1.put()
+        game.p2.put()
+        game.put()
+        logging.info("Game set on")
+
     
     @classmethod
     def create(cls, **kwargs):
-        t1 = kwargs.pop('p1')
-        t2 = kwargs.pop('p2')
-        p1 = t1 if t1.id < t2.id else t2
-        p2 = t2 if t1.id < t2.id else t1
+        p1 = kwargs.pop("p1")
+        p2 = kwargs.pop("p2")
         # we assume p1 and p2 are set to nowPlaying if playing.
         # make sure this is set.
+        m = {"message": "Can't setup game"}
+        
         if not (p1.nowPlaying or p2.nowPlaying):
             logging.info("Both players not found playing, going to try to setup a game!")
-            game = Game.getGame(p1=p1,p2=p2)
-            if game:
-                logging.info("Somehow found a NON PLAYING player playing")
-                raise Exception("Game already found between these two.")
-            else:
-                logging.info("Setting up a game between two players %s and %s" % (p1.name, p2.name))
-                newgame = Game(p1=p1,p2=p2)
-                Game.setGameOn(game=newgame)
+            newgame = Game(p1=p1,p2=p2)
+            Game.setGameOn(game=newgame)
 
-                return Game.getMsg(message="Creating a game", game=game, id=t1.id)
-        raise Exception("One of the players was already playing, sorry.")
+            return Game.getMsg(message="Creating a game", game=newgame, id=p1.id)
+        elif p2.nowPlaying and not p1.nowPlaying:
+            if p2.nowPlaying:
+                m['error'] = JSONError.PLAYER_ALREADY_PLAYING(p2)
+                return m
+        else:
+            game = db.GqlQuery("SELECT * FROM Game WHERE p1=:1 AND gameOn=:2", p1, True).get()
+            if not game:
+                game = db.GqlQuery("SELECT * FROM Game WHERE p2=:1 AND gameOn=:2", p1, True).get()
+            if game:
+                m = Game.getMsg(message="Creating a game",game=game, id=p1.id)
+                return m 
+            else:
+                m['error'] = JSONError.CANT_SETUP_GAME()    
+                return m
     
     @classmethod
     def getGame(cls, **kwargs):
-        t1 = kwargs.pop('p1')
-        t2 = kwargs.pop('p2')
-        p1 = t1 if t1.id < t2.id else t2
-        p2 = t2 if t1.id < t2.id else t1
-        now = datetime.now()
-        since = now - timedelta(seconds=TIME_TO_EXPIRE)
-        result = db.GqlQuery('SELECT * FROM Game WHERE p1=:1 AND p2=:2 AND created > :3',p1,p2,since).get()
+        p1 = kwargs.pop("p1")
+        p2 = kwargs.pop("p2")
+        result = db.GqlQuery("SELECT * FROM Game WHERE p1=:1 AND p2=:2 AND gameOn = :3",p1,p2,True).get()
+        if not result:
+            result = db.GqlQuery("SELECT * FROM Game WHERE p2=:1 AND p1=:2 AND gameOn = :3",p1,p2,True).get()
         return result
     
     @classmethod
     def getMsg(cls, **kwargs):
-        message = kwargs.pop('message')
-        game = kwargs.pop('game')
-        myId = kwargs.pop('id')
-        
-        logging.info("Setting up message for %s and game between %s and %s", game.p1.name, game.p1.id, game.p2.id)
+        message = kwargs.pop("message")
+        game = kwargs.pop("game")
+        myId = kwargs.pop("id")
+        p = game.p1 if game.p1.id == myId else game.p2
+        logging.info("Setting up message for %s and game between %s and %s", p.name, game.p1.id, game.p2.id)
         
         me = UserLocation.getLoc(id = myId)
         you = UserLocation.getLoc(id = game.p1.id if game.p2.id == myId else game.p2.id)
@@ -347,36 +361,33 @@ class Game(db.Model):
         time_left = TIME_TO_EXPIRE - (datetime.now() - game.created).seconds
         
         distance = _earth_distance(you.location.lat, you.location.lon, me.location.lat, me.location.lon)
-        gameInfo = { 'lat': you.location.lat, 'lon': you.location.lon, 
-                    'distance': distance, 'time_left': time_left}
-        gameInfo['gameStatus'] = 'playing' if game.gameOn else { 'me': meVerified, 'you': youVerified}  
-        return {'message' : message, 'game': gameInfo}
+        gameInfo = { "lat": you.location.lat, "lon": you.location.lon, "id": you.id, 
+                    "distance": distance, "time_left": time_left}
+        gameInfo["gameStatus"] = "playing" if (game.p1verified and game.p2verified) else { "me": meVerified, "you": youVerified}  
+        return {"message" : message, "game": gameInfo}
     
     @classmethod
     def update(cls, **kwargs):
-        game = kwargs.pop('game')
-        lat = kwargs.pop('lat')
-        lon = kwargs.pop('lon')
-        id = kwargs.pop('id')
+        """Updates location of a player and returns data about the other player"s location"""
+        game = kwargs.pop("game")
+        lat = kwargs.pop("lat")
+        lon = kwargs.pop("lon")
+        id = kwargs.pop("id")
         UserLocation.update(id=id, lat=lat, lon=lon)
         return Game.getMsg(id=id, game=game, message="Updated a user's location in game")
         
     @classmethod
     def verify(cls, **kwargs):
         """Verifies if a user wants to play a game."""
-        game = kwargs.pop('game')
-        vId = kwargs.pop('id')
+        game = kwargs.pop("game")
+        vId = kwargs.pop("id")
         
         if game:
             if vId == game.p1.id and not game.p1verified:
                 game.p1verified = True
-                if game.p2verified:
-                    game.gameOn = True
                 game.put()
             elif vId == game.p2.id and not game.p2verified:
                 game.p2verified = True
-                if game.p1verified:
-                    game.gameOn = True
                 game.put()
             else:
                 return Game.getMsg(message="Didn't need to verify anyone",game=game, id=vId)
@@ -388,27 +399,42 @@ class Game(db.Model):
     def play(cls, **kwargs):
         # try to play between two people.
         # first, we try to create a game.
-        # if we can't create a game, we try to verify a game.
-        # if we don't need to verify a game, we update a game.
-        p1 = getUser(kwargs.pop('p1'))
-        p2 = getUser(kwargs.pop('p2'))
+        # if we can"t create a game, we try to verify a game.
+        # if we don"t need to verify a game, we update a game.
+        p1 = getUser(kwargs.pop("p1"))
+        p2 = getUser(kwargs.pop("p2"))
+        action = kwargs.pop("action")
+        message = {"message": "Trying to play"}
+        if not (p1 and p2):
+            message['error'] = JSONError.NOT_REGISTERED()
+            return json.dumps(message)
         
         if Game.removeStaleGames():
                 logging.info("Removed stale games.")
-                
-        game = Game.getGame(p1=p1,p2=p2)
-        logging.info("Game already found" if game else "Game not yet found")
         
-        message = 'Trying to play'
-        try:
+        if action=="setup":
             message = Game.create(p1=p1, p2=p2)
-        except Exception, e:
-            logging.info(str(e))
-            if (game.p1verified and game.p2verified and 'lat' in kwargs and 'lon' in kwargs):
-                message = Game.update(game=game, lat=kwargs['lat'], lon=kwargs['lon'], id=p1.id)
+        elif action=="update":
+            game = Game.getGame(p1=p1,p2=p2)
+            if game:
+                message = Game.update(game=game, lat=kwargs["lat"], lon=kwargs["lon"], id=p1.id)
             else:
+                message['error'] = JSONError.NO_GAME_TO_UPDATE()
+        elif action=="verify":
+            game = Game.getGame(p1=p1,p2=p2)
+            if game:
                 message = Game.verify(id=p1.id, game=game)
+            else:
+                message['error'] = JSONError.NO_GAME_TO_VERIFY()
+        elif action=="decline":
+            game = Game.getGame(p1=p1,p2=p2)
+            if game:
+                Game.setGameOff(game)
+                message = "Player successfully declined gameplay"
+            else:
+                message['error'] = JSONError.NO_GAME_TO_DECLINE()
+                
+        else:
+            message["error"] = JSONError.NO_ACTION_TAKEN()
 
         return json.dumps(message)
-        
-        

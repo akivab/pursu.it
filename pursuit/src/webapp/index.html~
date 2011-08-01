@@ -1,0 +1,11 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Pursu.it</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <script src="js/processing.min.js"></script>
+    <canvas data-processing-sources="game.pde"></canvas>  
+  </body>
+</html>
