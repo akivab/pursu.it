@@ -27,6 +27,8 @@ from django.utils import simplejson as json
 from datetime import datetime, timedelta
 from google.appengine.ext import db
 
+from random import random
+
 import logging
 import math
 import JSONError
@@ -268,6 +270,7 @@ class Game(db.Model):
 
     p1 = db.ReferenceProperty(User, collection_name="player1")
     p2 = db.ReferenceProperty(User, collection_name="player2")
+    tagger_id = db.StringProperty()
     created = db.DateTimeProperty(auto_now_add=True)
     p1verified = db.BooleanProperty(default=False)
     p2verified = db.BooleanProperty(default=False)
@@ -303,6 +306,7 @@ class Game(db.Model):
         game.p2.nowPlaying = True
         game.p1.put()
         game.p2.put()
+        game.tagger = game.p1.id if random() < 0.5 else game.p2.id
         game.put()
         logging.info("Game set on")
 
@@ -363,7 +367,8 @@ class Game(db.Model):
         distance = _earth_distance(you.location.lat, you.location.lon, me.location.lat, me.location.lon)
         gameInfo = { "lat": you.location.lat, "lon": you.location.lon, "id": you.id, 
                     "distance": distance, "time_left": time_left}
-        gameInfo["gameStatus"] = "playing" if (game.p1verified and game.p2verified) else { "me": meVerified, "you": youVerified}  
+        gameInfo["gameStatus"] = "playing" if (game.p1verified and game.p2verified) else { "me": meVerified, "you": youVerified}
+        gameInfo["role"] = 1 if myId == game.tagger_id else 0  
         return {"message" : message, "game": gameInfo}
     
     @classmethod
