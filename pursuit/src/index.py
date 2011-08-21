@@ -1,6 +1,7 @@
 from google.appengine.ext import webapp, db
 from django.utils import simplejson as json
 from google.appengine.ext.webapp.util import run_wsgi_app
+from google.appengine.ext.webapp import template
 from random import random
 import JSONError
 import model
@@ -10,12 +11,57 @@ import logging
 def milesToMeters(miles):
     return miles * 609.344
 
+class BusinessHandler(webapp.RequestHandler):
+    def get(self):
+        name = self.request.get("name")
+        action = self.request.get("action")
+        tv = {}
+        if not action:
+            biz = model.Business.getBiz(name=name)
+            if not biz:
+                tv["biz"] = biz
+                self.response.out.write(template.render("webapp/biz_template.html", tv))
+            else:
+                self.response.out.write(template.render("webapp/biz_intro.html", tv))
+        elif action == "getlocs":
+            # we want to return entities
+            locs, message = model.Business.getBizLocations(name=name)
+            logging.log(logging.INFO, message)
+            self.response.out.write(json.dumps(locs))
+        elif action == "getgames":
+            games, message = model.Business.getGames(name=name)
+            logging.log(logging.INFO, message)
+            self.response.out.write(json.dumps(games))
+        elif not name:
+            self.response.out.write(template.render("webapp/biz_intro.html", tv))
+
+    def post(self):
+        name = self.request.get("name")
+        action = self.request.get("action")
+        if action == "updateloc":
+            # we want to get entities, update the ith one
+            lat = self.request.get("lat")
+            lon = self.request.get("lon")
+            number = self.request.get("number")
+            loc, message = model.Business.updateBizLocation(name=name, number=number,lat=lat,lon=lon)
+            logging.log(logging.info, message)
+            self.response.out.write(json.dumps([loc.id, loc.lat, loc.lon]))
+        elif action == "setup":
+            count = self.request.get("count")
+            biz, message = model.Business.create(name=name,count=count)
+            logging.log(logging.INFO, message)
+            self.redirect("/biz?name=%s"%name)
+        elif action == "setuptwitterauth":
+            pass
+        
 class MainHandler(webapp.RequestHandler):
     def get(self):
         c = model.User.all()
         c.order("-time")
-        self.response.out.write("Pursu.it players<br>")
-        self.response.out.write([(i.name, "".join(i.friendsPlaying)) for i in c])
+        peeps = [i for i in c if not i.isBiz]
+        tv = {}
+        tv["peeps"] = peeps[:5]
+        self.response.out.write(template.render("webapp/index.html", tv))
         
 class ErrorHandler(webapp.RequestHandler):
     def get(self):
@@ -167,6 +213,7 @@ application = webapp.WSGIApplication([
     ('/get', UpdateHandler),
     ('/play', PlayHandler),
     ('/test', TestHandler),
+    ('/biz', BusinessHandler),
     ('.*', ErrorHandler)
   ])
 

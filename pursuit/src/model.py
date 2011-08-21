@@ -26,13 +26,10 @@ from google.appengine.api import urlfetch
 from django.utils import simplejson as json
 from datetime import datetime, timedelta
 from google.appengine.ext import db
-
 from random import random
-
 import logging
 import math
 import JSONError
-
 import geobox
 
 
@@ -79,8 +76,6 @@ def process(lat, lon):
             else:
                 all_boxes.append(geobox.compute(lat, lon, resolution, slice))
     return all_boxes, db.GeoPt(lat, lon)
-       
-
 
 class FBData():
     def __init__(self, **kwargs):
@@ -121,6 +116,7 @@ class User(db.Model):
     friendsPlaying = db.StringListProperty()
     nowPlaying = db.BooleanProperty(default=False)
     outSince = db.DateTimeProperty()
+    isBiz = db.BooleanProperty()
     time = db.DateTimeProperty(auto_now_add=True)
     
     def findPlaying(self, friends):
@@ -154,7 +150,101 @@ class User(db.Model):
         newuser.findPlaying(friends)
 
         return newuser, message
- 
+    
+    @classmethod
+    def createBiz(cls, **kwargs):
+        id = kwargs["id"]
+        newuser = db.GqlQuery("SELECT * FROM User WHERE id=:1",kwargs["id"]).get()
+        message = "Found user in db"
+        if not newuser:
+            newuser = cls(**kwargs)
+            newuser.isBiz = True
+            message = "Creating new biz entity"
+        return newuser, message
+
+class Business(db.Model):
+    name = db.StringProperty()
+    entities = db.ListProperty(User)
+    twitterauth = db.StringProperty()
+    
+    @classmethod
+    def create(cls, **kwargs):
+        numEnt = kwargs.pop("count")
+        name = kwargs.pop("name")
+        biz = Business.getBiz(name=name)
+        message = "Business exists: %s" % str(biz.key())
+        if not biz:
+            message = "Creating business"
+            arr = []
+            for i in xrange(numEnt):
+                bizId = "%s%d" % (name, i)
+                bizUser, msg = User.createBiz(id=bizId, name=name)
+                message += msg
+                bizUser.put()
+                arr.append(bizUser)
+            biz = Business(name=name, entities=arr)
+            biz.put()
+        return biz, message
+    
+    @classmethod
+    def getBiz(cls, **kwargs):
+        name = kwargs["name"]
+        biz = db.GqlQuery("SELECT * FROM Business WHERE name=:1",name).get()
+        return biz
+    
+    @classmethod
+    def getBizLocations(cls, **kwargs):
+        biz = Business.getBiz(name=kwargs.get("name"))
+        if not biz: return None, "Couldn't get business locations"
+        else: message = "Got biz locations"
+        ret = []
+        for i in biz.entities:
+            loc = UserLocation.getLoc(i.id)
+            if not loc:
+                loc = UserLocation.create(user=i, lat="0", lon="0")
+            ret.append({"id": i.id, "lat": loc.location.lat, "lon": loc.location.lon})
+        return ret, message
+    
+    @classmethod
+    def getGames(cls, **kwargs):
+        biz = Business.getBiz(name=kwargs.get("name"))
+        if not biz: return None, "No business found"
+        else: message = "Getting games"
+        count = 0
+        ret = []
+        locs = []
+        for i in biz.entities:
+            tmp = []
+            results = db.GqlQuery("SELECT * FROM Game WHERE p2=:1 AND ", i).fetch(500)
+            for result in results:
+                loc = UserLocation.getLoc(id=result.p2.id)
+                tmp.append({"lat": loc.location.lat, "lon": loc.location.lon})
+            count += len(tmp)
+            locs.extend(tmp)
+        ret.append(count)
+        ret.append(locs)
+        
+        return ret, message
+        
+    @classmethod
+    def updateBizLocation(cls, **kwargs):
+        biz = Business.getBiz(name=kwargs.get("name"))
+        number = kwargs.get("number")
+        lat = kwargs.get("lat")
+        lon = kwargs.get("lon")
+        id =  "%s%d" % (biz.name, number)
+        if biz.entities[number].id == id:
+            loc = UserLocation.getLoc(id=id)
+            if not loc:
+                loc = UserLocation.create(user=id, lat=lat, lon=lon)
+            else:
+                loc.location.lon = lon
+                loc.location.lat = lat
+            loc.put()
+            return loc, "Updated location"
+        return None, "No location found"        
+    
+      
 class UserLocation(db.Model):
     """Represents a single user"s location."""
     user = db.ReferenceProperty(User)
@@ -284,7 +374,7 @@ class Game(db.Model):
         count = 0
         for game in results:
             count += 1
-            Game.setGameOff(game)
+            Game.setGameOff(game=game)
         return count > 0
     
     @classmethod
@@ -306,7 +396,7 @@ class Game(db.Model):
         game.p2.nowPlaying = True
         game.p1.put()
         game.p2.put()
-        game.tagger = game.p1.id if random() < 0.5 else game.p2.id
+        game.tagger = game.p1.id if game.p2.isBiz or random() < 0.5 else game.p2.id
         game.put()
         logging.info("Game set on")
 
@@ -319,13 +409,13 @@ class Game(db.Model):
         # make sure this is set.
         m = {"message": "Can't setup game"}
         
-        if not (p1.nowPlaying or p2.nowPlaying):
+        if not (p1.nowPlaying or (not p2.isBiz and p2.nowPlaying)):
             logging.info("Both players not found playing, going to try to setup a game!")
             newgame = Game(p1=p1,p2=p2)
             Game.setGameOn(game=newgame)
 
             return Game.getMsg(message="Creating a game", game=newgame, id=p1.id)
-        elif p2.nowPlaying and not p1.nowPlaying:
+        elif (not p2.isBiz and p2.nowPlaying) and not p1.nowPlaying:
             if p2.nowPlaying:
                 m['error'] = JSONError.PLAYER_ALREADY_PLAYING(p2)
                 return m
@@ -359,15 +449,13 @@ class Game(db.Model):
         
         me = UserLocation.getLoc(id = myId)
         you = UserLocation.getLoc(id = game.p1.id if game.p2.id == myId else game.p2.id)
-        meVerified = game.p1verified if game.p1.id == myId else game.p2verified
-        youVerified = game.p1verified if game.p2.id == myId else game.p2verified
         
         time_left = TIME_TO_EXPIRE - (datetime.now() - game.created).seconds
         
         distance = _earth_distance(you.location.lat, you.location.lon, me.location.lat, me.location.lon)
         gameInfo = { "lat": you.location.lat, "lon": you.location.lon, "id": you.id, 
                     "distance": distance, "time_left": time_left}
-        gameInfo["gameStatus"] = "playing" if (game.p1verified and game.p2verified) else { "me": meVerified, "you": youVerified}
+        gameInfo["gameStatus"] = (game.p1verified and game.p2verified)
         gameInfo["role"] = 1 if myId == game.tagger_id else 0  
         return {"message" : message, "game": gameInfo}
     
@@ -414,27 +502,33 @@ class Game(db.Model):
             message['error'] = JSONError.NOT_REGISTERED()
             return json.dumps(message)
         
+        logging.debug("Playing between %s and %s with action %s" % (p1.id, p2.id, action))
+        
         if Game.removeStaleGames():
                 logging.info("Removed stale games.")
         
         if action=="setup":
+            logging.info("Trying to setup game for %s" % p1.name)
             message = Game.create(p1=p1, p2=p2)
         elif action=="update":
+            logging.info("Trying to update game for %s with lat %s and lon %s" % (p1.name, kwargs["lat"], kwargs["lon"]))
             game = Game.getGame(p1=p1,p2=p2)
             if game:
                 message = Game.update(game=game, lat=kwargs["lat"], lon=kwargs["lon"], id=p1.id)
             else:
                 message['error'] = JSONError.NO_GAME_TO_UPDATE()
         elif action=="verify":
+            logging.info("Trying to verify game for %s" % p1.name)
             game = Game.getGame(p1=p1,p2=p2)
             if game:
                 message = Game.verify(id=p1.id, game=game)
             else:
                 message['error'] = JSONError.NO_GAME_TO_VERIFY()
         elif action=="decline":
+            logging.info("Declining game for %s" % p1.name)
             game = Game.getGame(p1=p1,p2=p2)
             if game:
-                Game.setGameOff(game)
+                Game.setGameOff(game=game)
                 message = "Player successfully declined gameplay"
             else:
                 message['error'] = JSONError.NO_GAME_TO_DECLINE()

@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+    <title>{% biz.name %} - Analytics</title>
+    <script>BIZ_NAME = {% biz.name %}</script>
+    <script src="js/biz.js"></script>
+  </head>
+  <body>
+    <div id="main">
+      <h1>{% biz.name %}</h1> 
+      
+      <h2>Map of business locations</h2>
+      <div id="map"></div>
+
+      <h2>Twitter updates</h2>
+      <div id="twitterupdate">
+	    {% if biz.twitterauth %}
+	    <div id="input"></div>
+	    <div id="tweets"></div>
+	    {% else %}
+	    <div id="getauth"></div>
+	    {% endif %}
+      </div>
+
+      <h2>Visitor updates</h2>
+      <div id="games">
+	    <div id="gamecount"></div>
+	    <div id="gamelocs"></div>
+      </div>
+  </body>
+</html>
