@@ -7,22 +7,31 @@ import JSONError
 import model
 import logging
 
-
 def milesToMeters(miles):
     return miles * 609.344
 
+class EmailHandler(webapp.RequestHandler):
+    def post(self):
+        email = self.request.get("email")
+        if not model.Email.getEmail(email):
+            model.Email.postEmail(email, self.request)
+            self.response.out.write("Thanks, "+email)
+        else:
+            self.response.out.write("Gotcha. Thanks.")
+        
+        
 class BusinessHandler(webapp.RequestHandler):
     def get(self):
         name = self.request.get("name")
         action = self.request.get("action")
         tv = {}
-        if not action:
+        if "action" not in self.request.arguments():
             biz = model.Business.getBiz(name=name)
-            if not biz:
+            if biz:
                 tv["biz"] = biz
-                self.response.out.write(template.render("webapp/biz_template.html", tv))
+                self.response.out.write(template.render("biz_template.html", tv))
             else:
-                self.response.out.write(template.render("webapp/biz_intro.html", tv))
+                self.response.out.write(template.render("biz_intro.html", tv))
         elif action == "getlocs":
             # we want to return entities
             locs, message = model.Business.getBizLocations(name=name)
@@ -32,20 +41,19 @@ class BusinessHandler(webapp.RequestHandler):
             games, message = model.Business.getGames(name=name)
             logging.log(logging.INFO, message)
             self.response.out.write(json.dumps(games))
-        elif not name:
-            self.response.out.write(template.render("webapp/biz_intro.html", tv))
+        elif "name" not in self.request.arguments():
+            self.response.out.write(template.render("biz_intro.html", tv))
 
     def post(self):
         name = self.request.get("name")
         action = self.request.get("action")
         if action == "updateloc":
-            # we want to get entities, update the ith one
             lat = self.request.get("lat")
             lon = self.request.get("lon")
             number = self.request.get("number")
             loc, message = model.Business.updateBizLocation(name=name, number=number,lat=lat,lon=lon)
-            logging.log(logging.info, message)
-            self.response.out.write(json.dumps([loc.id, loc.lat, loc.lon]))
+            logging.log(logging.INFO, message)
+            self.response.out.write(json.dumps(loc))
         elif action == "setup":
             count = self.request.get("count")
             biz, message = model.Business.create(name=name,count=count)
@@ -61,7 +69,12 @@ class MainHandler(webapp.RequestHandler):
         peeps = [i for i in c if not i.isBiz]
         tv = {}
         tv["peeps"] = peeps[:5]
-        self.response.out.write(template.render("webapp/index.html", tv))
+        
+        if(self.request.get("see_demo")):
+                self.response.out.write(template.render("index.html", tv))
+        else:
+            self.response.out.write(template.render("tmp_index.html", tv))
+        #self.response.out.write("Coming soon.")
         
 class ErrorHandler(webapp.RequestHandler):
     def get(self):
@@ -137,8 +150,8 @@ class UpdateHandler(webapp.RequestHandler):
             logging.info("Found " if len(nearestFriends) > 0 else "Didn't find " +
                          "friends nearby %s" % "\n".join(["(%s,%s), %s" % (str(i[0]), i[1].user.name, str(i[1].location)) for i in nearestFriends]))
             
-            userData = {"id": user.id, "name": user.name, "lon": lon, "lat": lat}
-            friendData = [{"id": i[1].user.id, "name": i[1].user.name, "lat": i[1].location.lat, "lon": i[1].location.lon, "distance": milesToMeters(i[0])} for i in nearestFriends]
+            userData = {"id": user.id, "name": user.name, "lon": lon, "lat": lat, "points": user.points}
+            friendData = [{"points": i[1].user.points, "id": i[1].user.id, "name": i[1].user.name, "lat": i[1].location.lat, "lon": i[1].location.lon, "distance": milesToMeters(i[0])} for i in nearestFriends]
             toreturn = json.dumps({ "message": message, "user": userData, "friends": friendData })
             return toreturn
         except Exception, e:
@@ -214,6 +227,7 @@ application = webapp.WSGIApplication([
     ('/play', PlayHandler),
     ('/test', TestHandler),
     ('/biz', BusinessHandler),
+    ('/addEmail', EmailHandler),
     ('.*', ErrorHandler)
   ])
 

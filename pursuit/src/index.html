@@ -1,20 +1,15 @@
+<!doctype html>
 <html>
+  <head>
+    <title>Pursu.it</title>
+    <link href='http://fonts.googleapis.com/css?family=Gloria+Hallelujah' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="/css/style.css" />
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.2/jquery.min.js"></script>
+    <script>$(function(){ $("#email").click(function(){if($("#email").attr("value")=="Your email") $("#email").attr("value", "");}); $("#e").submit(function(){$.post("/addEmail", {"email": $("#email").attr("value")}, function(data){ $("#email").attr("value", data).attr("disabled", "true"); });}); }); </script>
+  </head>
   <body>
-    {% for greeting in greetings %}
-      {% if greeting.author %}
-        <b>{{ greeting.author.nickname }}</b> wrote:
-      {% else %}
-        An anonymous person wrote:
-      {% endif %}
-      <blockquote>{{ greeting.content|escape }}</blockquote>
-    {% endfor %}
-
-    <form action="/sign" method="post">
-      <div><textarea name="content" rows="3" cols="60"></textarea></div>
-      <div><input type="submit" value="Sign Guestbook"></div>
-    </form>
-
-    <a href="{{ url }}">{{ url_linktext }}</a>
-
+        <form id="e" onsubmit="return false;"><input id="email" type="text" value="Your email" /></form>
+        <script src="/js/processing.min.js"></script>
+        <canvas id="game" data-processing-sources="game.pde"></canvas>  
   </body>
 </html>

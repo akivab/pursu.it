@@ -22,13 +22,14 @@ __author__ = """
             bslatkin@gmail.com (Brett Slatkin)
             """
             
-from google.appengine.api import urlfetch
+from google.appengine.api import urlfetch, mail
 from django.utils import simplejson as json
 from datetime import datetime, timedelta
 from google.appengine.ext import db
 from random import random
 import logging
 import math
+import time
 import JSONError
 import geobox
 
@@ -46,7 +47,7 @@ GEOBOX_CONFIGS = (
 RADIUS = 3963.1676
 
 # Time to expire, in seconds
-TIME_TO_EXPIRE = 3600
+TIME_TO_EXPIRE = 60*15
 
 APP_ID = "186198858096044"
 APP_SECRET = "5175bb6a3b05141f0d0ad972acb0cd05"
@@ -109,16 +110,36 @@ class FBData():
             return [i["id"] for i in self.friends_json["data"]]
         raise Exception(self.friends_json["error"]["message"])
 
+class Email(db.Model):
+    email = db.StringProperty(required=True)
+    time = db.DateTimeProperty(auto_now_add=True)
+    
+    @classmethod
+    def getEmail(cls, email):
+        return db.GqlQuery("SELECT * FROM Email WHERE email=:1",email).get()
+    @classmethod
+    def postEmail(cls, email, request):
+        Email(email=email).put()
+        mail.send_mail(sender="Pursu.it <akiva@wesosmart.com>",
+          to="Akiva Bamberger <akiva@pursu.it>",
+          subject="%s wants to be kept in the loop" % email,
+          body="Email received from %s at time %s and with request %s." % (email, str(datetime.now()), str(request)))
+        
 class User(db.Model):
     name = db.StringProperty(required=True)
     id = db.StringProperty()
     access_token = db.StringProperty()
+    points = db.IntegerProperty(default=0)
     friendsPlaying = db.StringListProperty()
     nowPlaying = db.BooleanProperty(default=False)
-    outSince = db.DateTimeProperty()
-    isBiz = db.BooleanProperty()
+    outSince = db.DateTimeProperty(auto_now_add=True)
+    isBiz = db.BooleanProperty(default=False)
     time = db.DateTimeProperty(auto_now_add=True)
     
+    @classmethod
+    def getUser(cls, **kwargs):
+        return db.GqlQuery("SELECT * FROM User WHERE id = :1", kwargs.get("id")).get()
+        
     def findPlaying(self, friends):
         logging.info("Finding playing friends for player")
         
@@ -129,7 +150,7 @@ class User(db.Model):
             logging.info("No friends found already" if len(results) is 0 else "Found friends") 
             
             for result in results:
-                if result.id not in self.friendsPlaying:
+                if self.id is not result.id and result.id not in self.friendsPlaying:
                     logging.info("Found %s and %s playing, adding to db", result.name, self.name)
                     result.friendsPlaying.append(self.id)
                     self.friendsPlaying.append(result.id)
@@ -148,7 +169,8 @@ class User(db.Model):
         friends = fb.getFriends()
         
         newuser.findPlaying(friends)
-
+        
+        newuser.put()
         return newuser, message
     
     @classmethod
@@ -159,20 +181,23 @@ class User(db.Model):
         if not newuser:
             newuser = cls(**kwargs)
             newuser.isBiz = True
+            newuser.put()
             message = "Creating new biz entity"
         return newuser, message
 
 class Business(db.Model):
     name = db.StringProperty()
-    entities = db.ListProperty(User)
+    entities = db.ListProperty(db.Key)
     twitterauth = db.StringProperty()
     
     @classmethod
     def create(cls, **kwargs):
-        numEnt = kwargs.pop("count")
+        numEnt = int(kwargs.pop("count"))
         name = kwargs.pop("name")
         biz = Business.getBiz(name=name)
-        message = "Business exists: %s" % str(biz.key())
+        message = ""
+        if biz:
+            message = "Business exists: %s" % str(biz.key)
         if not biz:
             message = "Creating business"
             arr = []
@@ -181,9 +206,10 @@ class Business(db.Model):
                 bizUser, msg = User.createBiz(id=bizId, name=name)
                 message += msg
                 bizUser.put()
-                arr.append(bizUser)
+                arr.append(bizUser.key())
             biz = Business(name=name, entities=arr)
             biz.put()
+        Business.getBizLocations(name=name)
         return biz, message
     
     @classmethod
@@ -198,8 +224,8 @@ class Business(db.Model):
         if not biz: return None, "Couldn't get business locations"
         else: message = "Got biz locations"
         ret = []
-        for i in biz.entities:
-            loc = UserLocation.getLoc(i.id)
+        for i in User.get(biz.entities):
+            loc = UserLocation.getLoc(id=i.id)
             if not loc:
                 loc = UserLocation.create(user=i, lat="0", lon="0")
             ret.append({"id": i.id, "lat": loc.location.lat, "lon": loc.location.lon})
@@ -213,9 +239,9 @@ class Business(db.Model):
         count = 0
         ret = []
         locs = []
-        for i in biz.entities:
+        for i in User.get(biz.entities):
             tmp = []
-            results = db.GqlQuery("SELECT * FROM Game WHERE p2=:1 AND ", i).fetch(500)
+            results = db.GqlQuery("SELECT * FROM Game WHERE p2=:1", i).fetch(500)
             for result in results:
                 loc = UserLocation.getLoc(id=result.p2.id)
                 tmp.append({"lat": loc.location.lat, "lon": loc.location.lon})
@@ -229,25 +255,17 @@ class Business(db.Model):
     @classmethod
     def updateBizLocation(cls, **kwargs):
         biz = Business.getBiz(name=kwargs.get("name"))
-        number = kwargs.get("number")
-        lat = kwargs.get("lat")
-        lon = kwargs.get("lon")
+        number = int(kwargs.get("number"))
+        lat = float(kwargs.get("lat"))
+        lon = float(kwargs.get("lon"))
         id =  "%s%d" % (biz.name, number)
-        if biz.entities[number].id == id:
-            loc = UserLocation.getLoc(id=id)
-            if not loc:
-                loc = UserLocation.create(user=id, lat=lat, lon=lon)
-            else:
-                loc.location.lon = lon
-                loc.location.lat = lat
-            loc.put()
-            return loc, "Updated location"
-        return None, "No location found"        
-    
+        UserLocation.update(id=id,lat=lat, lon=lon, isBiz=True)
+        return [id,lat,lon], "Updated location"
       
 class UserLocation(db.Model):
     """Represents a single user"s location."""
     user = db.ReferenceProperty(User)
+    isBiz = db.BooleanProperty()
     id = db.StringProperty()
     location = db.GeoPtProperty()
     geoboxes = db.StringListProperty()
@@ -259,13 +277,14 @@ class UserLocation(db.Model):
         lon = kwargs.pop("lon")
         id = kwargs.pop("id")
         user = getUser(id)
+        isBiz = user.isBiz
         
         if not user:
             raise Exception("Did not find user with given id %s" % id)
         else:
             userLocation = db.GqlQuery("SELECT * FROM UserLocation WHERE id=:1",id).get()
             if not userLocation:
-                userLocation = UserLocation(user=user, id=user.id)
+                userLocation = UserLocation(user=user, id=user.id, isBiz=isBiz)
             userLocation.geoboxes, userLocation.location = process(lat, lon)
             logging.info("Updating the user location for user %s" % user.name)
             userLocation.put()
@@ -283,10 +302,13 @@ class UserLocation(db.Model):
         lat = kwargs.pop("lat")
         lon = kwargs.pop("lon")
         id = kwargs["id"] = kwargs["user"].id
+        kwargs["isBiz"] = kwargs["user"].isBiz 
         userLocation = db.GqlQuery("SELECT * FROM UserLocation WHERE id=:1",id).get() 
         if not userLocation:
             kwargs["geoboxes"], kwargs["location"] = process(lat,lon)
-            return cls(**kwargs)
+            m = cls(**kwargs)
+            m.put()
+            return m
         else:
             return userLocation
             
@@ -304,8 +326,8 @@ class UserLocation(db.Model):
         if not userLocation:
             logging.info("Querying before updating! A big no-no.")
             return
-        logging.info("Looking for friends nearby for %s (has %s as friends)" % (user.name, str(user.friendsPlaying)))
-
+        logging.info("Looking for friends nearby for %s (has %s as friends)" % (user.name, str(user.friendsPlaying)))            
+            
         found_friends = {}
         for params in GEOBOX_CONFIGS[:3]:
             if len(found_friends) >= max_results:
@@ -322,7 +344,15 @@ class UserLocation(db.Model):
             query.filter("geoboxes =", box)
             query.filter("id in", user.friendsPlaying)
             
+            tmp = cls.all()
+            tmp.filter("isBiz =", True)
+            
+            results2 = tmp.fetch(50)
+            logging.info("Businesses nearby: %d",  len(results2))
+
+            
             results = query.fetch(50)
+            results.extend(results2)
             logging.debug("Found %d results", len(results))
           
             # De-dupe results.
@@ -341,7 +371,7 @@ class UserLocation(db.Model):
                 friends_by_distance.append((distance, friend))
             else:
                 logging.info("Didn't return result for user %s (time limit: %s)" % (friend.id, str(date_diff)))
-        friends_by_distance.sort() 
+        friends_by_distance.sort()
         return friends_by_distance[:max_results]
 
 class Game(db.Model):
@@ -392,11 +422,14 @@ class Game(db.Model):
     def setGameOn(cls, **kwargs):
         game = kwargs.pop("game")
         game.gameOn = True
-        game.p1.nowPlaying = True
-        game.p2.nowPlaying = True
+        if not game.p1.isBiz:
+            game.p1.nowPlaying = True
+        if not game.p2.isBiz:
+            game.p2.nowPlaying = True
         game.p1.put()
         game.p2.put()
-        game.tagger = game.p1.id if game.p2.isBiz or random() < 0.5 else game.p2.id
+        game.tagger_id = game.p1.id if game.p2.isBiz or random() < 0.5 else game.p2.id
+        logging.info("Game tagger is %s" % game.tagger_id)
         game.put()
         logging.info("Game set on")
 
@@ -427,6 +460,7 @@ class Game(db.Model):
                 m = Game.getMsg(message="Creating a game",game=game, id=p1.id)
                 return m 
             else:
+                logging.info("p1 %s, p2 %s, p2.isBiz %s", p1.id, p2.id, str(p2.isBiz))
                 m['error'] = JSONError.CANT_SETUP_GAME()    
                 return m
     
@@ -441,11 +475,12 @@ class Game(db.Model):
     
     @classmethod
     def getMsg(cls, **kwargs):
+        """Gets a message for a player"""
         message = kwargs.pop("message")
         game = kwargs.pop("game")
         myId = kwargs.pop("id")
         p = game.p1 if game.p1.id == myId else game.p2
-        logging.info("Setting up message for %s and game between %s and %s", p.name, game.p1.id, game.p2.id)
+        logging.info("Setting up message for %s and game between %s and %s, tagger is %s", p.name, game.p1.id, game.p2.id, game.tagger_id)
         
         me = UserLocation.getLoc(id = myId)
         you = UserLocation.getLoc(id = game.p1.id if game.p2.id == myId else game.p2.id)
@@ -454,9 +489,10 @@ class Game(db.Model):
         
         distance = _earth_distance(you.location.lat, you.location.lon, me.location.lat, me.location.lon)
         gameInfo = { "lat": you.location.lat, "lon": you.location.lon, "id": you.id, 
-                    "distance": distance, "time_left": time_left}
-        gameInfo["gameStatus"] = (game.p1verified and game.p2verified)
-        gameInfo["role"] = 1 if myId == game.tagger_id else 0  
+                    "distance": distance, "time_left": time_left, "points": you.points}
+        gameInfo["gameStatus"] = ((game.p1verified or game.p1.isBiz) and (game.p2verified or game.p2.isBiz))
+        gameInfo["role"] = 1 if myId == game.tagger_id else 0
+        gameInfo["endtime"] = time.mktime((game.created + timedelta(seconds=TIME_TO_EXPIRE)).timetuple())
         return {"message" : message, "game": gameInfo}
     
     @classmethod
@@ -490,10 +526,30 @@ class Game(db.Model):
     
     @classmethod
     def play(cls, **kwargs):
-        # try to play between two people.
-        # first, we try to create a game.
-        # if we can"t create a game, we try to verify a game.
-        # if we don"t need to verify a game, we update a game.
+        """Plays a game between two people.
+        API:
+        [+] action=setup:
+            sets up a game between two players.
+            necessary fields:
+                - id : main player
+                - p2 : secondary player
+        [+] action=verify:
+            verifies a game between two players
+            necessary fields:
+                - id: this player
+                - p2: other player
+        [+] action=update:
+            updates the location of a player in a game
+            (similar to get, but with different info)
+                - id: this player
+                - p2: other player
+                - lat: latitude of main player
+                - lon: longitude of main player
+        [+] action=tag:
+            performs a tagging action.
+                -id: tagging player
+                -p2: tagged player
+        """
         p1 = getUser(kwargs.pop("p1"))
         p2 = getUser(kwargs.pop("p2"))
         action = kwargs.pop("action")
@@ -529,10 +585,37 @@ class Game(db.Model):
             game = Game.getGame(p1=p1,p2=p2)
             if game:
                 Game.setGameOff(game=game)
-                message = "Player successfully declined gameplay"
+                message["message"] = "Player successfully declined gameplay"
+                message["gameStatus"] = False
             else:
                 message['error'] = JSONError.NO_GAME_TO_DECLINE()
-                
+        elif action=="tag":
+            logging.info("Tagging for %s" % p1.name)
+            game = Game.getGame(p1=p1,p2=p2)
+            if game:
+                if game.p1.id is not game.tagger_id:
+                    message['error'] = JSONError.WRONG_TAGGER()
+                else:
+                    tagger = game.p1
+                    other = game.p2
+                    l1 = UserLocation.getLoc(id=tagger.id)
+                    l2 = UserLocation.getLoc(id=other.id)
+                    d = max(1,_earth_distance(l1.location.lat, l1.location.lon, l2.location.lat, l2.location.lon))
+                    logging.info("distance: %s", str(d))
+                    
+                    pChange = int(max(5, 20 / d))
+                    tagger.points += pChange
+                    tagger.put()
+                    
+                    if not other.isBiz:
+                        other.points -= int(min(pChange, tagger.points/2))
+                    
+                    Game.setGameOff(game=game)
+                    message["message"] = "Player successfully tagged"
+                    message["points"] = {p1.id: p1.points, p2.id: p2.points}
+                    message["gameStatus"] = False
+            else:
+                message['error'] = JSONError.NO_GAME_TO_TAG()
         else:
             message["error"] = JSONError.NO_ACTION_TAKEN()
 

@@ -27,3 +27,9 @@ def GENERIC_ERROR(error_string):
 
 def NO_GAME_TO_DECLINE():
     return {"message": "No game to decline", "code": 8}
+
+def NO_GAME_TO_TAG():
+    return {"message": "No game to tag", "code": 9}
+
+def WRONG_TAGGER():
+    return {"message": "Cannot complete tag, wrong tagger", "code": 10}

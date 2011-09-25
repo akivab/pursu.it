@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="/css/style.css" />
+    <title>Sign up, cuz</title>
+  </head>
+  <body>
+    <div id="main">
+        <form action='/biz' method='post'>
+            <input type='hidden' name='action' value='setup' />
+            <label for='n'>name of business:
+                <input id='n' type='text' name='name' />
+            </label>
+
+            <label for='c'>number of trucks:
+                <input id='c' type='text' name='count' />
+            </label>
+
+            <label for='l'>original location:
+                <label for='la'>lat:
+                 <input id='la' type='text' name='lat' />
+                </label>
+                <label for='lo'>lon:
+                    <input id='lo' type='text' name='lon' />
+                </label>
+
+            </label>
+
+            <input type='submit' value='set up' />
+        </form>    
+    </div>
+  </body>
+</html>
