@@ -30,7 +30,7 @@ $(function () {
     $("#email")
 	.addClass("email centered")
 	.keyup(function(){
-	    setInterval(function(){ $("
+	    setInterval(function(){ $(
 	});
 		
     

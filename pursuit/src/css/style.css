@@ -3,6 +3,7 @@ body{ background-color: #72afa1; overflow:hidden;}
 label{ display: block; width: 400px;}
 input{ margin: 10px; }
 *:focus{ outline: none; }
-#email{ margin: none; background: transparent; color: white; border: none; font-size: 18px; visibility: hidden; font-family: "Gloria Hallelujah"; overflow: hidden; }
 #game{ position: fixed; left: -1px; top: -1px; }
 .centered{ position: fixed;  top: 50%; left: 50%;  margin-top: -124px;  margin-left: -183px; }
+.bike{width: 248px; position: absolute; left: 89px; top: -1px;}
+.email{ font-size: 18px; font-family: "Gloria Hallelujah"; }

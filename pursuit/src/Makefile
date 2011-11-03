@@ -1,2 +1,2 @@
 clean:
-	rm -rf *~ *#;
+	rm -rf *~ *# a.out;
